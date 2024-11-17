@@ -101,6 +101,16 @@ async function redeemReward(userId, type) {
       return;
     }
 
+    if (pointsRedeemed > currentPoints) {
+      alert("You do not have enough points to redeem this reward.");
+      return;
+    }
+
+    if (pointsRedeemed > 0) {
+      alert("Points redeemed must be greater than 0.");
+      return;
+    }
+
     // Determine endpoint and payload based on type (coupon or donation)
     const endpoint = type === "coupon" ? "/redeem-coupon/" : "/redeem-donation/";
     const payload = {
