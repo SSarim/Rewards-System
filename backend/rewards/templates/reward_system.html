@@ -8,90 +8,133 @@
   <script>
     const apiBaseUrl = "http://127.0.0.1:8000/rewards-api";
 
-    // Helper function for API calls
-    async function apiCall(endpoint, method, data) {
-      try {
-        const response = await fetch(`${apiBaseUrl}${endpoint}`, {
-          method: method,
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(data),
-        });
-        return await response.json();
-      } catch (error) {
-        console.error(`Error calling ${endpoint}:`, error);
-        return { error: "An Error has Mysteriously Appreared. Please try again later." };
-      }
+  // Generalized API call function
+async function apiCall(endpoint, method, data = null) {
+  try {
+    const options = {
+      method: method,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    };
+
+    if (data) {
+      options.body = JSON.stringify(data); // Add body if data is provided
     }
 
-    // Load user data (points and redemption history)
-    async function loadUserData(userId) {
-      // Fetch total points
-      const pointsResponse = await apiCall("/get-points/", "POST", { user_id: userId });
-      if (pointsResponse.error) {
-        alert(pointsResponse.error);
-        return;
-      }
-      document.getElementById("total-points").innerText = pointsResponse.total_points || 0;
+    const response = await fetch(`${apiBaseUrl}${endpoint}`, options);
 
-      // Fetch redemption history
-      const redemptionsResponse = await apiCall("/get-redemptions/", "POST", { user_id: userId });
-      if (redemptionsResponse.error) {
-        alert(redemptionsResponse.error);
-        return;
-      }
-      const tableBody = document.getElementById("redemption-history-body");
-      tableBody.innerHTML = ""; // Clear existing rows
-      redemptionsResponse.redemption_history.forEach((item) => {
-        const row = `
-          <tr>
-            <td>${item.reward.reward_description}</td>
-            <td>${item.amount}</td>
-            <td>${item.reward.is_active ? "Active" : "Inactive"}</td>
-            <td>${item.reward.redeemed_date || "N/A"}</td>
-          </tr>`;
-        tableBody.innerHTML += row;
-      });
+    // Check for non-2xx responses
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
     }
 
-    // Redeem a reward
-    async function redeemReward(userId, type) {
-      const rewardDescription = document.getElementById("reward-description").value;
-      const pointsRedeemed = parseInt(document.getElementById("points-redeemed").value, 10);
-      const amount = parseFloat(document.getElementById("amount").value);
+    // Attempt to parse JSON response
+    const responseData = await response.json();
+    return responseData;
+  } catch (error) {
+    console.error(`Error calling ${endpoint}:`, error);
+    return { error: "An error has occurred. Please try again later." };
+  }
+}
 
-      if (!rewardDescription || !pointsRedeemed || isNaN(amount)) {
-        alert("Please fill in all fields.");
-        return;
-      }
-
-      const endpoint = type === "coupon" ? "/redeem-coupon/" : "/redeem-donation/";
-      const payload = {
-        user_id: userId,
-        reward_description: rewardDescription,
-        points_redeemed: pointsRedeemed,
-        ...(type === "coupon" ? { coupon_amount: amount } : { donation_amount: amount }),
-      };
-
-      const response = await apiCall(endpoint, "POST", payload);
-      if (response.error) {
-        alert(response.error);
-        return;
-      }
-
-      alert(response.message);
-      loadUserData(userId); // Reload user data to reflect changes
+// Load user data (points and redemption history)
+async function loadUserData(userId) {
+  try {
+    // Fetch total points
+    const pointsResponse = await apiCall("/get-points/", "POST", { user_id: userId });
+    if (pointsResponse.error) {
+      alert(`Error fetching points: ${pointsResponse.error}`);
+      return;
     }
 
-    // Initialize
-    document.addEventListener("DOMContentLoaded", () => {
-      const userId = 1; // Replace with dynamic user ID if needed
-      loadUserData(userId);
+    // Update points display
+    document.getElementById("total-points").innerText = pointsResponse.total_points || 0;
 
-      document.getElementById("redeem-coupon-btn").addEventListener("click", () => redeemReward(userId, "coupon"));
-      document.getElementById("redeem-donation-btn").addEventListener("click", () => redeemReward(userId, "donation"));
+    // Fetch redemption history from db (NEED TO FIX THIS)
+    const redemptionsResponse = await apiCall("/get-redemptions/", "POST", { user_id: userId });
+    if (redemptionsResponse.error) {
+      alert(`Error fetching redemptions: ${redemptionsResponse.error}`);
+      return;
+    }
+
+    // Populate redemption history table from DB
+    const tableBody = document.getElementById("redemption-history-body");
+    tableBody.innerHTML = ""; // Clear existing rows
+//pull data (reward_description, amount, is_active, redeemed_date) from user db
+    redemptionsResponse.redemption_history.forEach((item) => {
+      const row = `
+        <tr>
+          <td>${item.reward.reward_description}</td>
+          <td>${item.amount || "N/A"}</td>
+          <td>${item.reward.is_active ? "Active" : "Inactive"}</td>
+          <td>${item.reward.redeemed_date || "N/A"}</td>
+        </tr>`;
+      tableBody.innerHTML += row;
     });
+  } catch (error) {
+    console.error("Error loading user data:", error);
+    alert("An error occurred while loading user data. Please try again.");
+  }
+}
+
+// Redeem a reward
+async function redeemReward(userId, type) {
+  try {
+    // const rewardDescription = document.getElementById("reward-description").value.trim();
+    const pointsRedeemed = parseInt(document.getElementById("points-redeemed").value, 10);
+    const amount = parseFloat(document.getElementById("amount").value);
+
+    // Validate input fields
+    // if (!rewardDescription) {
+    //   alert("Reward description is required.");
+    //   return;
+    // }
+
+    if (!pointsRedeemed || isNaN(pointsRedeemed)) {
+      alert("Points redeemed must be a valid number.");
+      return;
+    }
+
+    if (!amount || isNaN(amount)) {
+      alert("Amount must be a valid number.");
+      return;
+    }
+
+    // Determine endpoint and payload based on type (coupon or donation)
+    const endpoint = type === "coupon" ? "/redeem-coupon/" : "/redeem-donation/";
+    const payload = {
+      user_id: userId,
+      reward_description: rewardDescription,
+      points_redeemed: pointsRedeemed,
+      ...(type === "coupon" ? { coupon_amount: amount } : { donation_amount: amount }),
+    };
+
+    // Call API
+    const response = await apiCall(endpoint, "POST", payload);
+
+    if (response.error) {
+      alert(`Error redeeming reward: ${response.error}`);
+      return;
+    }
+
+    alert(response.message);
+    loadUserData(userId); // Reload user data to update changes
+  } catch (error) {
+    console.error("Error redeeming reward:", error);
+    alert("An error occurred while redeeming the reward. Please try again.");
+  }
+}
+
+// Initialize the page
+document.addEventListener("DOMContentLoaded", () => {
+  const userId = 1; // Not sure if this should be Dynamic or Static (for user id  = 1)
+  loadUserData(userId);
+
+  document.getElementById("redeem-coupon-btn").addEventListener("click", () => redeemReward(userId, "coupon"));
+  document.getElementById("redeem-donation-btn").addEventListener("click", () => redeemReward(userId, "donation"));
+});
+
   </script>
 </head>
 
@@ -101,7 +144,7 @@
     <!-- Header -->
     <div class="text-center mb-5">
       <h1 class="display-4 fw-bold text-gradient">Reward System</h1>
-      <p class="text-muted fs-5">Manage and redeem your rewards seamlessly with our intuitive platform.</p>
+      <p class="text-muted fs-5">GreenGrove Farms Rewards System</p>
     </div>
 
     <!-- Points Display -->
@@ -153,7 +196,7 @@
           <div class="card-body">
             <form>
               <!-- Reward Description -->
-              <div class="mb-4">
+              <!-- <div class="mb-4">
                 <label for="reward-description" class="form-label fw-bold text-primary">Reward Description</label>
                 <input
                   type="text"
@@ -161,7 +204,7 @@
                   class="form-control rounded-pill shadow-sm"
                   placeholder="Enter reward description"
                 />
-              </div>
+              </div> -->
 
               <!-- Points Redeemed -->
               <div class="mb-4">
@@ -211,7 +254,6 @@
     </div>
   </div>
 
-  <!-- Custom CSS -->
   <style>
     .text-gradient {
       background: linear-gradient(to right, #2196f3, #21cbf3);
@@ -242,9 +284,7 @@
     }
   </style>
 
-  <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <!-- Bootstrap Icons -->
   <link
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css"
