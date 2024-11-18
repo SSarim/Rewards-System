@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reward System</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script>
+    const apiBaseUrl = "http://127.0.0.1:8000/rewards-api";
+    let currentPoints = 0; // Store user's current points
+
+    // Generalized API call function
+    async function apiCall(endpoint, method, data = null) {
+      try {
+        const options = {
+          method: method,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        };
+
+        if (data) {
+          options.body = JSON.stringify(data); // Add body if data is provided
+        }
+
+        const response = await fetch(`${apiBaseUrl}${endpoint}`, options);
+
+        // Check for non-2xx responses
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        return await response.json();
+      } catch (error) {
+        console.error(`Error calling ${endpoint}:`, error);
+        return { error: "An error has occurred. Please try again later." };
+      }
+    }
+
+    // Load user data (points and redemption history)
+    async function loadUserData(userId) {
+  try {
+    // Fetch total points
+    const pointsResponse = await apiCall("/get-points/", "POST", { user_id: userId });
+
+    // Debug: Log the response
+    console.log("Points API Response:", pointsResponse);
+
+    if (pointsResponse.error) {
+      alert(`Error fetching points: ${pointsResponse.error}`);
+      return;
+    }
+
+    // Update points display
+    currentPoints = pointsResponse.total_points || 0; // Default to 0 if null
+    document.getElementById("total-points").innerText = currentPoints;
+
+    // Fetch redemption history
+    const redemptionsResponse = await apiCall("/get-redemptions/", "POST", { user_id: userId });
+
+    // Debug: Log the response
+    console.log("Redemptions API Response:", redemptionsResponse);
+
+    if (redemptionsResponse.error) {
+      alert(`Error fetching redemptions: ${redemptionsResponse.error}`);
+      return;
+    }
+
+    // Populate redemption history table
+    const tableBody = document.getElementById("redemption-history-body");
+    tableBody.innerHTML = ""; // Clear existing rows
+
+    redemptionsResponse.redemption_history.forEach((item) => {
+      const row = `
+        <tr>
+          <td>${item.reward_description || "N/A"}</td>
+          <td>${item.points_redeemed || "N/A"}</td>
+          <td>${item.is_active ? "Active" : "Inactive"}</td>
+          <td>${item.redeemed_date ? new Date(item.redeemed_date).toLocaleDateString() : "N/A"}</td>
+        </tr>`;
+      tableBody.innerHTML += row;
+    });
+  } catch (error) {
+    console.error("Error loading user data:", error);
+    alert("An error occurred while loading user data. Please try again.");
+  }
+}
+
+
+    // Redeem a reward
+    async function redeemReward(userId, type) {
+      try {
+        const pointsRedeemed = parseInt(document.getElementById("points-redeemed").value, 10);
+        const amount = parseFloat(document.getElementById("amount").value);
+
+        // // Validate input fields
+        // if (!pointsRedeemed || isNaN(pointsRedeemed)) {
+        //   alert("Points redeemed must be a valid number.");
+        //   return;
+        // }
+
+        // if (!amount || isNaN(amount)) {
+        //   alert("Amount must be a valid number.");
+        //   return;
+        // }
+
+        // if (pointsRedeemed > currentPoints) {
+        //   alert("You do not have enough points to redeem this reward.");
+        //   return;
+        // }
+
+        // Determine endpoint and payload based on type (coupon or donation)
+        const endpoint = type === "coupon" ? "/redeem-coupon/" : "/redeem-donation/";
+        const payload = {
+          user_id: userId,
+          points_redeemed: pointsRedeemed,
+          ...(type === "coupon" ? { coupon_amount: amount } : { donation_amount: amount }),
+        };
+
+        // Call API
+        const response = await apiCall(endpoint, "POST", payload);
+
+        if (response.error) {
+          alert(`Error redeeming reward: ${response.error}`);
+          return;
+        }
+
+        alert(response.message);
+        loadUserData(userId); // Reload user data to update changes
+      } catch (error) {
+        console.error("Error redeeming reward:", error);
+        alert("An error occurred while redeeming the reward. Please try again.");
+      }
+    }
+
+    // Initialize the page
+    document.addEventListener("DOMContentLoaded", () => {
+      const userId = 1; // Hardcoded to load user_id = 1
+      loadUserData(userId);
+
+      document.getElementById("redeem-coupon-btn").addEventListener("click", () => redeemReward(userId, "coupon"));
+      document.getElementById("redeem-donation-btn").addEventListener("click", () => redeemReward(userId, "donation"));
+    });
+  </script>
+</head>
+
+
+<body style="background: linear-gradient(to bottom, #e3f2fd, #ffffff); font-family: 'Poppins', sans-serif;">
+  <div class="container py-5">
+    <!-- Header -->
+    <div class="text-center mb-5">
+      <h1 class="display-4 fw-bold text-gradient">Reward System</h1>
+      <p class="text-muted fs-5">GreenGrove Farms Rewards System</p>
+    </div>
+
+    <!-- Points Display -->
+    <div class="row justify-content-center mb-4">
+      <div class="col-md-6">
+        <div class="card border-0 shadow-lg rounded-lg">
+          <div class="card-body text-center py-5">
+            <h3 class="fw-bold text-secondary">Your Total Points</h3>
+            <h1 class="display-2 text-success mb-0" id="total-points">0</h1>
+            <p class="text-muted mt-3">Collect more points to unlock exclusive rewards!</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row gy-5">
+      <!-- Redemption History -->
+      <div class="col-md-6">
+        <div class="card border-0 shadow-lg rounded-lg">
+          <div class="card-header bg-gradient-primary text-white rounded-top">
+            <h4 class="mb-0">Redemption History</h4>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody id="redemption-history-body">
+                  <!-- Dynamically populated rows -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Redeem Reward -->
+      <div class="col-md-6">
+        <div class="card border-0 shadow-lg rounded-lg">
+          <div class="card-header bg-gradient-secondary text-white rounded-top">
+            <h4 class="mb-0">Redeem Reward</h4>
+          </div>
+          <div class="card-body">
+            <form>
+              <!-- Reward Description -->
+              <!-- <div class="mb-4">
+                <label for="reward-description" class="form-label fw-bold text-primary">Reward Description</label>
+                <input
+                  type="text"
+                  id="reward-description"
+                  class="form-control rounded-pill shadow-sm"
+                  placeholder="Enter reward description"
+                />
+              </div> -->
+
+              <!-- Points Redeemed -->
+              <div class="mb-4">
+                <label for="points-redeemed" class="form-label fw-bold text-primary">Points Redeemed</label>
+                <input
+                  type="number"
+                  id="points-redeemed"
+                  class="form-control rounded-pill shadow-sm"
+                  placeholder="Enter points to redeem"
+                />
+              </div>
+
+              <!-- Amount -->
+              <div class="mb-4">
+                <label for="amount" class="form-label fw-bold text-primary">Amount</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  id="amount"
+                  class="form-control rounded-pill shadow-sm"
+                  placeholder="Enter amount"
+                />
+              </div>
+
+              <!-- Buttons -->
+              <div class="d-grid gap-3">
+                <button
+                  type="button"
+                  id="redeem-coupon-btn"
+                  class="btn btn-primary btn-lg rounded-pill shadow-sm text-light"
+                  style="background: linear-gradient(45deg, #2196f3, #21cbf3); border: none;"
+                >
+                  <i class="bi bi-cash"></i> Redeem Coupon
+                </button>
+                <button
+                  type="button"
+                  id="redeem-donation-btn"
+                  class="btn btn-outline-secondary btn-lg rounded-pill shadow-sm text-dark"
+                >
+                  <i class="bi bi-heart-fill"></i> Redeem Donation
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .text-gradient {
+      background: linear-gradient(to right, #2196f3, #21cbf3);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .bg-gradient-primary {
+      background: linear-gradient(45deg, #2196f3, #21cbf3);
+    }
+
+    .bg-gradient-secondary {
+      background: linear-gradient(45deg, #6a1b9a, #8e24aa);
+    }
+
+    .card {
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0px 15px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn:hover {
+      transform: scale(1.05);
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css"
+  />
+</body>
+
+
+</html>

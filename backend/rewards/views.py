@@ -7,9 +7,7 @@ from django.utils import timezone
 from django.utils.crypto import get_random_string
 from django.db import IntegrityError
 from django.db.models import Sum
-from django.http import HttpResponse
 from django.shortcuts import render
-
 
 # Create your views here.
 class EarnedRewardView(APIView):
